@@ -19,18 +19,11 @@ import jlm.universe.Entity;
 import jlm.universe.World;
 
 
-public abstract class Exercise  {
+public abstract class Exercise  extends Lecture {
 	public boolean debug = false; /* whether to debug this particular exo */
 
-	protected boolean done = false; /** indicate whether this Exercise was successfully done or not */
-
-	public String name = "<no name>"; 
-	protected String mission = "";  /** The text to display to present the lesson */
-	static protected Map<ProgrammingLanguage,String> css; /** The CSS to use for a given language */
-	public String hint = null;
-	
-	protected Map<String, String> tips = new HashMap<String, String>();
-	
+	protected boolean done = false;  
+		
 	protected Map<ProgrammingLanguage, List<SourceFile>> sourceFiles; /** All the editable source files */
 
 	
@@ -47,13 +40,8 @@ public abstract class Exercise  {
 
 	protected Map<String, String> runtimePatterns;
 
-
-	private Lesson lesson; 
-
-	public String getName() {
-		return this.name;
-	}
-
+	public ExecutionProgress lastResult;
+	
 	public void successfullyPassed() {
 		this.done = true;
 	}
@@ -64,53 +52,6 @@ public abstract class Exercise  {
 
 	public boolean isSuccessfullyPassed() {
 		return this.done;
-	}
-
-	public Lesson getLesson() {
-		return this.lesson;
-	}
-	
-	protected static String getCSS(ProgrammingLanguage lang) {
-		if (css==null) {
-			 css = new HashMap<ProgrammingLanguage, String>();
-			 for (ProgrammingLanguage l : Game.programmingLanguages) {
-				 String theCSS = 
-						"  <style type=\"text/css\">\n"+
-				        "    body { font-family: tahoma, \"Times New Roman\", serif; font-size:10px; margin:10px; }\n"+
-				        "    code { background:#EEEEEE; }\n"+
-				        "    pre { background: #EEEEEE;\n"+
-				        "          margin: 5px;\n"+
-				        "          padding: 6px;\n"+
-				        "          border: 1px inset;\n"+
-				        "          width: 640px;\n"+
-				        "          overflow: auto;\n"+
-				        "          text-align: left;\n"+
-				        "          font-family: \"Courrier New\", \"Courrier\", monospace; }\n"+
-				        "   .comment { background:#EEEEEE;\n"+
-				        "              font-family: \"Times New Roman\", serif;\n"+
-				        "              color:#00AA00;\n"+
-				        "              font-style: italic; }\n";
-				 for (ProgrammingLanguage l2 : Game.programmingLanguages) {
-					 if (!l.equals(l2)) {
-						 theCSS += "."+l2.getLang()+" {display: none; color:#FF0000;}\n";
-						 theCSS += "."+l2.getLang().toLowerCase()+" {display: none; color:#FF0000;}\n";
-					 } else {
-						 /* DEBUG ONLY, to see the specific elements*/ 
-						 //theCSS += "."+l2.getLang()+" {visibility: visible; color:#00AA00;}\n";
-						 //theCSS += "."+l2.getLang().toLowerCase()+" {visibility: visible; color:#00AA00;}\n";
-					 }
-				 }
-				 theCSS +=  "  </style>\n";
-				 css.put(l, theCSS);
-			 }
-		}
-		if (css.get(lang)==null)
-			throw new RuntimeException("Damn, no CSS for lang "+lang+". I'm puzzled");
-		return css.get(lang);
-	}
-	public String getMission(ProgrammingLanguage lang) {
-		String res = "<html><head>"+getCSS(lang)+"</head><body>"+this.mission+"</body></html>";
-		return res;
 	}
 
 	public List<World> getCurrentWorld() {
@@ -131,13 +72,23 @@ public abstract class Exercise  {
 	public abstract void run(List<Thread> runnerVect);	
 	public abstract void runDemo(List<Thread> runnerVect);	
 	
-	public boolean check() throws Exception {
+	public void check() throws Exception {
+		lastResult = new ExecutionProgress();
 		for (int i=0; i<currentWorld.length; i++) {
 			currentWorld[i].notifyWorldUpdatesListeners();
-			if (!currentWorld[i].equals(answerWorld[i]))
-				return false;
+			
+			lastResult.totalTests++;
+
+			if (!currentWorld[i].equals(answerWorld[i])) {
+				String diff = answerWorld[i].diffTo(currentWorld[i]);
+				lastResult.details += "The world '"+currentWorld[i].getName()+"' differs";
+				if (diff != null) 
+					lastResult.details += ":\n"+diff;
+				lastResult.details += "\n";
+			} else {
+				lastResult.passedTests++;
+			}
 		}
-		return true;
 	}
 	public void reset() {
 		for (int i=0; i<initialWorld.length; i++) 
@@ -155,6 +106,7 @@ public abstract class Exercise  {
 	private final InMemoryCompiler compiler = new InMemoryCompiler(
 			getClass().getClassLoader(), Arrays.asList(new String[] { "-target", "1.6" }));
 
+
 	/**
 	 * Generate Java source from the user function
 	 * @throws JLMCompilerException 
@@ -168,9 +120,10 @@ public abstract class Exercise  {
 
 		/* Prepare the source files */
 		Map<String, CharSequence> sources = new TreeMap<String, CharSequence>();
-		for (SourceFile sf: sourceFiles.get(Game.JAVA)) 
-			if (sf.isCompilable()) 
-				sources.put(className(sf.getName()), sf.getCompilableContent(runtimePatterns)); 
+		if (sourceFiles.get(Game.JAVA) != null)
+			for (SourceFile sf: sourceFiles.get(Game.JAVA)) 
+				if (sf.isCompilable()) 
+					sources.put(className(sf.getName()), sf.getCompilableContent(runtimePatterns)); 
 
 		if (sources.isEmpty())
 			return;
@@ -184,6 +137,7 @@ public abstract class Exercise  {
 		} catch (JLMCompilerException e) {
 			System.err.println("Compilation error:");
 			out.log(e.getDiagnostics());
+			lastResult = ExecutionProgress.newCompilationError(e.getDiagnostics());
 			throw e;
 		}
 		
@@ -330,8 +284,7 @@ public abstract class Exercise  {
 
 	
 	public Exercise(Lesson lesson) {
-		super();
-		this.lesson = lesson;
+		super(lesson);
 		sourceFiles = new HashMap<ProgrammingLanguage, List<SourceFile>>();
 		runtimePatterns = new TreeMap<String, String>();
 	}
@@ -410,11 +363,8 @@ public abstract class Exercise  {
 		return this.answerWorld[index];
 	}
 	
-	public String getTip(String tipsId) {
-		return this.tips.get(tipsId);
-	}
 	public String toString() {
-		return name;
+		return getName();
 	}
 
 	/* setters and getter of the programming language that this exercise accepts */ 

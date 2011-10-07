@@ -6,6 +6,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -14,6 +16,7 @@ import java.util.zip.ZipOutputStream;
 import javax.swing.JOptionPane;
 
 import jlm.core.model.lesson.Exercise;
+import jlm.core.model.lesson.Lecture;
 import jlm.core.model.lesson.Lesson;
 import jlm.core.model.lesson.SourceFile;
 import jlm.core.model.lesson.SourceFileAliased;
@@ -34,44 +37,72 @@ public class ZipSessionKit implements ISessionKit {
 
 	private static File SAVE_DIR = new File(HOME_DIR + SEP + ".jlm");
 
-	private static String SAVE_FILENAME = "jlm.zip";
-	private static File SAVE_FILE = new File(SAVE_DIR, SAVE_FILENAME);
-
 	public ZipSessionKit(Game game) {
 		this.game = game;
 	}
 
-	public void store() throws UserAbortException {
-		this.store(SAVE_FILE);
+	private File openSaveFile(File path, Lesson lesson) {
+		if (path == null)
+			path = SAVE_DIR;
+
+		String name = lesson.getClass().getCanonicalName();
+		Pattern namePattern = Pattern.compile(".Main$");
+		Matcher nameMatcher = namePattern.matcher(name);
+		name = nameMatcher.replaceAll("");
+
+		namePattern = Pattern.compile("^lessons.");
+		nameMatcher = namePattern.matcher(name);
+		name = nameMatcher.replaceAll("");
+
+		return new File(path, "jlm-"+name+".zip");
 	}
 
-	public void load() {
-		this.load(SAVE_FILE);
+	@Override
+	public void storeAll(File path) throws UserAbortException {
+		for (Lesson lesson : this.game.getLessons())
+			storeLesson(path, lesson);
 	}
 
-	public void cleanUp() {
-		this.cleanUp(SAVE_FILE);
+	@Override
+	public void loadAll(File path) {
+		for (Lesson lesson : this.game.getLessons())
+			loadLesson(path, lesson);
 	}
 
-	public void store(File saveFile) throws UserAbortException {
+	@Override
+	public void cleanAll() {
+		for (Lesson lesson : this.game.getLessons())
+			cleanLesson(lesson);
+	}
+
+	@Override
+	public void storeLesson(File path, Lesson lesson) throws UserAbortException {
+		File saveFile = openSaveFile(path, lesson);
+
 		if (!saveFile.exists()) {
 			File parentDirectory = saveFile.getParentFile().getAbsoluteFile();
 			if (!parentDirectory.exists()) {
 				if (!parentDirectory.mkdir()) {
-					Logger.log("ZipSessionKit:store", "cannot create session store directory '" + parentDirectory + "'");
+					throw new RuntimeException("cannot create session store directory '" + parentDirectory + "'");
 				}
 			}
 		}
 
 		ZipOutputStream zos = null;
+		boolean wroteSomething = false;
 		try {
 			zos = new ZipOutputStream(new FileOutputStream(saveFile));
 			zos.setMethod(ZipOutputStream.DEFLATED);
 			zos.setLevel(Deflater.BEST_COMPRESSION);
 
-			for (Lesson lesson : this.game.getLessons()) {
-				for (Exercise exercise : lesson.exercises()) {
-
+			zos.putNextEntry(new ZipEntry("README"));
+			String text = "This file is a JLM session file. Please see http://www.loria.fr/~quinson/Teaching/JLM/ for more details";
+			zos.write(text.getBytes());
+			zos.closeEntry();
+			
+			for (Lecture lecture : lesson.exercises()) {
+				if (lecture instanceof Exercise) {
+					Exercise exercise = (Exercise) lecture;
 					// flag successfully passed exercise
 					if (exercise.isSuccessfullyPassed()) {
 						ZipEntry ze = new ZipEntry(exercise.getClass().getName() + "/DONE");
@@ -80,6 +111,7 @@ public class ZipSessionKit implements ISessionKit {
 						// bytes[0] = 'x';
 						zos.write(bytes);
 						zos.closeEntry();
+						wroteSomething  = true;
 					}
 
 					// save exercise body
@@ -104,17 +136,18 @@ public class ZipSessionKit implements ISessionKit {
 							byte[] bytes = srcFile.getBody().getBytes();
 							zos.write(bytes);
 							zos.closeEntry();
+							wroteSomething = true;
 						}
-				} // end-for exercise
-			} // end-for lesson
+				} // is exercise
+			} // end-for lecture
 
 		} catch (IOException ex) { // FileNotFoundException or IOException
 			// FIXME: should raise an exception and not show a dialog (it is not a UI class)
 			ex.printStackTrace();
-			Object[] options = { "Ok, quit and loose my data", "Please stop! I'll save it myself first" };
-			int n = JOptionPane.showOptionDialog(null, "JLM were unable to save your session file ("
+			Object[] options = { "Ok, quit and lose my data", "Please stop! I'll save it myself first" };
+			int n = JOptionPane.showOptionDialog(null, "JLM were unable to save your session file for lesson "+lesson.getName()+"("
 					+ ex.getClass().getSimpleName() + ":" + ex.getMessage() + ").\n\n"
-					+ " Would you like proceed anyway (and loose any solution typed so far)?",
+					+ " Would you like proceed anyway (and lose any solution typed so far)?",
 					"Your changes are NOT saved", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE,
 					null, options, options[1]);
 			if (n == 1) {
@@ -124,25 +157,29 @@ public class ZipSessionKit implements ISessionKit {
 
 		} finally {
 			try {
-				if (zos != null)
+				if (zos != null && wroteSomething)
 					zos.close();
 			} catch (IOException ioe) {
 				ioe.printStackTrace();
 			}
+			if (!wroteSomething || saveFile.length() == 0)
+				saveFile.delete();
 		}
-
 	}
 
-	public void load(File saveFile) {
-		if (!saveFile.exists())
+	public void loadLesson(File path, Lesson lesson) {
+		File saveFile = openSaveFile(path, lesson);
+
+		if (!saveFile.exists() || saveFile.length()==0)
 			return;
 
 		ZipFile zf = null;
 		try {
 			zf = new ZipFile(saveFile);
 
-			for (Lesson lesson : this.game.getLessons()) {
-				for (Exercise exercise : lesson.exercises()) {
+			for (Lecture lecture : lesson.exercises()) {
+				if (lecture instanceof Exercise) {
+					Exercise exercise = (Exercise) lecture;
 
 					ZipEntry entry = zf.getEntry(exercise.getClass().getName() + "/DONE");
 					if (entry != null) {
@@ -159,7 +196,7 @@ public class ZipSessionKit implements ISessionKit {
 							ZipEntry srcEntry = zf.getEntry(lang+"/"+exercise.getClass().getName() + "/" + srcFile.getName());
 							if (srcEntry == null) /* try to load using the old format (not specifying the programming language) */
 								srcEntry = zf.getEntry(exercise.getClass().getName() + "/" + srcFile.getName());
-							
+
 							if (srcEntry != null) {
 								InputStream is = zf.getInputStream(srcEntry);
 
@@ -187,16 +224,16 @@ public class ZipSessionKit implements ISessionKit {
 								}
 							}
 						}
-				} // end-for exercise
-			} // end-for lesson
+				} // is exercise
+			} // end-for lecture
 
 		} catch (IOException ex) { // ZipExecption or IOException
 			// FIXME: should raise an exception and not show a dialog (it is not a UI class)
 			ex.printStackTrace();
 			Object[] options = { "Proceed", "Abort" };
-			int n = JOptionPane.showOptionDialog(null, "JLM were unable to load your session file ("
+			int n = JOptionPane.showOptionDialog(null, "JLM were unable to load your code for lesson "+lesson.getName()+" ("
 					+ ex.getClass().getSimpleName() + ":" + ex.getMessage() + ").\n\n"
-					+ " Would you like proceed anyway (and loose any solution typed so far)?",
+					+ " Would you like proceed anyway (and lose any solution typed previously)?",
 					"Error while loading your session", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE,
 					null, options, options[1]);
 			if (n == 1) {
@@ -214,14 +251,25 @@ public class ZipSessionKit implements ISessionKit {
 		}
 	}
 
-	public void cleanUp(File saveFile) {
-		if (!saveFile.exists())
-			return;
-		else {
+	@Override
+	public void cleanLesson(Lesson lesson) {
+		File saveFile = openSaveFile(null, lesson);
+
+		if (saveFile.exists()) {
 			if (saveFile.delete()) {
 				Logger.log("ZipSessionKit:cleanup", "cannot remove session store directory");
 			}
 		}
+	}
+
+	@Override
+	public void storeAll() throws UserAbortException {
+		storeAll(null);
+	}
+
+	@Override
+	public void loadAll() {
+		loadAll(null);
 	}
 
 }

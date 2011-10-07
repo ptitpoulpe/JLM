@@ -41,14 +41,18 @@ is true, then the instruction <b>whatToDoAnyway()</b> will be executed anyway.
 Python functions have no explicit begin or end, and no curly braces to mark
 where the function code starts and stops. The only delimiter is a colon (:) and
 the indentation of the code itself.
+</p>
 
-Example 2.5. Indenting the buildConnectionString Function
+<p class="Python">Example 2.5. Indenting the buildConnectionString
+Function</p>
 
+<pre>
 def buildConnectionString(params):
     """Build a connection string from a dictionary of parameters.
 
     Returns string."""
     return ";".join(["%s=%s" % (k, v) for k, v in params.items()])
+</pre>
 
 Code blocks are defined by their indentation. By "code block", I mean
 functions, if statements, for loops, while loops, and so forth. Indenting
@@ -66,7 +70,7 @@ incorrect and will raise errors.
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>whatToDoNext()</b>
 <b>whatToDoAnyway()</b>
 </pre>
-<pre>if <b>condition</b>:
+<pre class="Python">if <b>condition</b>:
 &nbsp;&nbsp;&nbsp;&nbsp;<b>whatToDo()</b>
 <b>whatToDoAnyway()</b>
 &nbsp;&nbsp;&nbsp;&nbsp;<b>whatToDoNext()</b>
@@ -91,7 +95,7 @@ such as <b>!=</b> (checking inequality), <b>&lt;</b> (smaller than),
 (larger or equal to).</p>
 
 <p>Beware of the classical trap, which consists in testing the equality of a
-variable using = instead of ==. Hopefully, the Java compiler detects this
+variable using = instead of ==. Hopefully, the compiler detects this
 problem most of the time, but not always. If the variable is of type
 boolean, it can get trapped, so you have to be careful...
 
@@ -102,16 +106,17 @@ returns true if the buggle is facing a wall, and false in the other case.
 <p class="Java">
 Finally, a condition can be composed of several sub-conditions connected by
 boolean operations.
-<ul>
   <li><tt>cond1 && cond2</tt> is true when <tt>cond1</tt> <b>and</b>
-  <tt>cond2</tt> are both true.</li>
+      <tt>cond2</tt> are both true (if <tt>cond1</tt> is false,
+      <tt>cond2</tt> is not even evaluated).</li> 
   <li><tt>cond1 || cond2</tt> is true if <tt>cond1</tt> <b>or</b> <tt>cond2</tt>
-are true (if <tt>cond1</tt> is true, <tt>cond2</tt> is not even evaluated).</li>
-<li><tt>!cond</tt> is true if <tt>cond</tt> is false.</li>
+      are true (if <tt>cond1</tt> is true, <tt>cond2</tt> is not even evaluated).</li>
+  <li><tt>!cond</tt> is true if <tt>cond</tt> is false.</li>
   <li>It is possible to force the order of evaluation by adding parenthesis. In
 ambigous cases, do not hesitate to add more parenthesis to remove any
 ambiguities on evaluation order.</li>
 </ul> 
+</p>
 <p class="Python">
 Finally, a condition can be composed of several sub-conditions connected by
 boolean operations.
@@ -124,7 +129,7 @@ are true (if <tt>cond1</tt> is true, <tt>cond2</tt> is not even evaluated).</li>
   <li>It is possible to force the order of evaluation by adding parenthesis. In
 ambigous cases, do not hesitate to add more parenthesis to remove any
 ambiguities on evaluation order.</li>
-</ul> 
+</p>
 
 <p class="Java">
 At least, it is possible to specify what to do when the condition is false
@@ -145,6 +150,8 @@ else:
 }</pre>
 </p>
 
+<p class="Python">Don't forget the colon (:) after the else, it is indicating 
+that a new block is beginning.</p>
 
 <h3>Exercise goal</h3><a name="Objectives">If the buggle is facing a wall (predicate
 <tt>isFacingWall()</tt>), you must move one step back. If not, you must move
